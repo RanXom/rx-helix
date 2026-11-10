@@ -1512,7 +1512,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "helix-core"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1548,7 +1548,7 @@ dependencies = [
 
 [[package]]
 name = "helix-dap"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "futures-executor",
@@ -1568,7 +1568,7 @@ dependencies = [
 
 [[package]]
 name = "helix-dap-types"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1576,7 +1576,7 @@ dependencies = [
 
 [[package]]
 name = "helix-event"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "foldhash 0.2.0",
@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "helix-loader"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "cc",
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "helix-lsp"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1642,11 +1642,11 @@ dependencies = [
 
 [[package]]
 name = "helix-parsec"
-version = "25.7.1"
+version = "25.11.0"
 
 [[package]]
 name = "helix-stdx"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "bitflags",
  "dunce",
@@ -1666,7 +1666,7 @@ dependencies = [
 
 [[package]]
 name = "helix-term"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1712,7 +1712,7 @@ dependencies = [
 
 [[package]]
 name = "helix-tui"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1728,7 +1728,7 @@ dependencies = [
 
 [[package]]
 name = "helix-vcs"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1744,7 +1744,7 @@ dependencies = [
 
 [[package]]
 name = "helix-view"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -3505,7 +3505,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "25.7.1"
+version = "25.11.0"
 dependencies = [
  "helix-core",
  "helix-loader",
