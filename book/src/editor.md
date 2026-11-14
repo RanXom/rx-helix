@@ -46,7 +46,7 @@
 | `path-completion` | Enable filepath completion. Show files and directories if an existing path at the cursor was recognized, either absolute or relative to the current opened document or current working directory (if the buffer is not yet saved). Defaults to true. | `true` |
 | `auto-format` | Enable automatic formatting on save[^3] | `true` |
 | `idle-timeout` | Time in milliseconds since last keypress before idle timers trigger. | `250` |
-| `completion-timeout` | Time in milliseconds after typing a word character before completions are shown, set to 5 for instant.  | `250` |
+| `completion-timeout` | Time in milliseconds after typing a word character before completions are shown. `5` is near instant; raise it if a slow language server is overwhelmed. | `5` |
 | `preview-completion-insert` | Whether to apply completion item instantly when selected | `true` |
 | `completion-trigger-len` | The min-length of word under cursor to trigger autocompletion | `2` |
 | `completion-replace` | Whether to make completions always replace the entire word and not just the part before the cursor | `false` |
