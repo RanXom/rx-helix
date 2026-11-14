@@ -48,6 +48,8 @@ pub struct MarkdownRender {
     inline_code: Vec<InlineCode>,
     cursor_line: usize,
     selected_lines: HashSet<usize>,
+    /// Code fence lines folded away because the cursor is not on them.
+    hidden_lines: HashSet<usize>,
 }
 
 #[derive(Default)]
@@ -94,6 +96,17 @@ struct TableLayout {
     indent: usize,
     header: usize,
     end: usize,
+}
+
+/// Code fence lines are folded away unless the cursor is on them or they are
+/// part of a visual selection.
+fn hide_fence_line(
+    line: usize,
+    cursor_line: usize,
+    selected_lines: &HashSet<usize>,
+    hide_code_fences: bool,
+) -> bool {
+    hide_code_fences && line != cursor_line && !selected_lines.contains(&line)
 }
 
 /// Style with inherited emphasis/underline modifiers cleared. Painting over
@@ -408,7 +421,9 @@ impl MarkdownRender {
         let table_head_style = plain(theme.get("markup.heading"));
         let table_body_style = plain(theme.get("ui.text"));
 
-        let link_custom: Vec<MarkdownLinkIcon> = doc.config.load().markdown.link_icons.clone();
+        let markdown_config = doc.config.load().markdown.clone();
+        let link_custom: Vec<MarkdownLinkIcon> = markdown_config.link_icons.clone();
+        let hide_code_fences = markdown_config.hide_code_fences;
         let available_width = view.inner_width(doc) as usize;
         // Walk back to the start of a table that straddles the top of the
         // viewport so a scrolled-off header still has a known layout.
@@ -468,7 +483,14 @@ impl MarkdownRender {
             if let Some(fence) = meta.in_code {
                 let trimmed = line.trim_start();
                 if is_fence(trimmed, fence.marker, fence.len) {
-                    if visible {
+                    if hide_fence_line(
+                        line_idx,
+                        render.cursor_line,
+                        &render.selected_lines,
+                        hide_code_fences,
+                    ) {
+                        render.hidden_lines.insert(line_idx);
+                    } else if visible {
                         render.lines.insert(
                             line_idx,
                             LineRender {
@@ -499,7 +521,14 @@ impl MarkdownRender {
                     .trim_matches(|ch| matches!(ch, '{' | '}' | '.' | ','))
                     .to_string();
 
-                if visible {
+                if hide_fence_line(
+                    line_idx,
+                    render.cursor_line,
+                    &render.selected_lines,
+                    hide_code_fences,
+                ) {
+                    render.hidden_lines.insert(line_idx);
+                } else if visible {
                     let text = (!language.is_empty())
                         .then(|| (indent, format!("󰅩 {language}"), code_info_style));
                     render.lines.insert(
@@ -770,6 +799,12 @@ impl MarkdownRender {
         render
     }
 
+    /// Document lines folded away by the renderer (code fence lines). They
+    /// must be added to the text annotations so the formatter skips them.
+    pub fn hidden_lines(&self) -> impl Iterator<Item = usize> + '_ {
+        self.hidden_lines.iter().copied()
+    }
+
     fn concealed(&self, doc_line: usize) -> bool {
         if self
             .lines
@@ -784,12 +819,12 @@ impl MarkdownRender {
 
 impl Decoration for MarkdownRender {
     fn decorate_line(&mut self, renderer: &mut TextRenderer, pos: LinePos) {
-        if self.concealed(pos.doc_line) {
-            return;
-        }
         let Some(line) = self.lines.get(&pos.doc_line) else {
             return;
         };
+        // Code-block and heading backgrounds are part of the rendered block,
+        // not a concealed marker. Keep painting them on the cursor line and on
+        // visual selections so selected code does not become transparent.
         if let Some(background) = line.background {
             renderer.set_style(
                 Rect::new(
@@ -2264,6 +2299,16 @@ mod tests {
             },
         );
         assert!(!render.concealed(2));
+    }
+
+    #[test]
+    fn fence_lines_hide_unless_cursor_or_selected() {
+        let mut selected = HashSet::new();
+        assert!(hide_fence_line(3, 2, &selected, true));
+        assert!(!hide_fence_line(2, 2, &selected, true));
+        assert!(!hide_fence_line(3, 2, &selected, false));
+        selected.insert(3);
+        assert!(!hide_fence_line(3, 2, &selected, true));
     }
 
     #[test]

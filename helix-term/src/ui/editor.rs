@@ -113,7 +113,10 @@ impl EditorView {
         } else {
             None
         };
-        let text_annotations = view.text_annotations(doc, Some(theme));
+        let mut text_annotations = view.text_annotations(doc, Some(theme));
+        if let Some(render) = &markdown_render {
+            text_annotations.add_hidden_lines(render.hidden_lines());
+        }
         let mut decorations = DecorationManager::default();
 
         if let Some(markdown_render) = markdown_render {

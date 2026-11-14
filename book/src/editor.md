@@ -318,6 +318,7 @@ Optional display-only markdown rendering. Disabled by default.
 | Key | Description | Default |
 | --- | ----------- | ------- |
 | `render` | Replace markdown markers with icons and frame characters | `false` |
+| `hide-code-fences` | Fold ` ``` ` fence lines unless the cursor is on them | `true` |
 | `images` | Draw local images inline with the Kitty graphics protocol | `false` |
 | `download_remote_images` | Download remote `http(s)` images with `curl` | `true` |
 | `link_icons` | Custom `{ pattern, icon }` link icons (checked before built-ins) | `[]` |
@@ -342,13 +343,15 @@ Headings lose their `#` markers and gain level icons (`󰲡`–`󰲫`), bullet l
 use `● ○ ◆ ◇` by nesting depth, task boxes use `󰄱`/`󰱒`, block quotes use `▋`,
 and horizontal rules become a full-width `─` line. Heading rows get a
 full-width background from existing theme scopes; icons use
-`markup.heading.1`–`.6`. Code blocks get a full-width background with a
-`󰅩 language` header and inline code gets a background. Rendering paints over
-the rendered document, so the buffer text is unchanged and
-editing/saving/searching still see ordinary markdown. Non-table cursor lines
-and selections show raw markdown; table rows stay rendered under the cursor so
-their inline formatting remains visible. Code fences keep their tree-sitter
-highlighting.
+`markup.heading.1`–`.6`. Code blocks get a full-width background and inline
+code gets a background. Code fence lines are folded away so the first code
+line follows the preceding text directly; move the cursor onto a fence line to
+see and edit it. Set `hide-code-fences = false` to keep the fence line as a
+blank header row instead. Rendering paints over the rendered document, so the
+buffer text is unchanged and editing/saving/searching still see ordinary
+markdown. Non-table cursor lines and selections show raw markdown; table rows
+stay rendered under the cursor so their inline formatting remains visible.
+Code fences keep their tree-sitter highlighting.
 Links and wiki links show icons while destinations are concealed, with
 per-host icons for known sites, and links inside headings, lists, quotes,
 tables, and callout titles are decorated. Inline code, emphasis, strong,

@@ -357,8 +357,11 @@ a theme can opt into render-markdown-style Diff backgrounds with
 `markup.heading.adaptive`, which derives H1–H6 colors from the theme palette.
 The fallback still uses existing UI scopes (`ui.selection`, `ui.menu`,
 `ui.popup`, `ui.cursorline`). Icons use `markup.heading.1`–`.6`; rules use
-`ui.linenr`; code blocks get a full-width `ui.cursorline` background with a
-`󰅩 language` header on the fence line and inline code gets a background.
+`ui.linenr`; code blocks get a full-width `ui.cursorline` background and inline
+code gets a background.
+Code fence lines are folded away unless the cursor is on them, so the first
+code line follows the preceding text directly. Set `hide-code-fences = false`
+to keep the fence line as a blank header row instead.
 The buffer text is unchanged: rendering paints over the rendered document after
 each line, so movement, editing, saving, and searching still see ordinary
 markdown. The cursor line and visual selections show raw markdown so markers

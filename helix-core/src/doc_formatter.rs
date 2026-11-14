@@ -212,7 +212,12 @@ impl<'t> DocumentFormatter<'t> {
         char_idx: usize,
     ) -> Self {
         // TODO divide long lines into blocks to avoid bad performance for long lines
-        let block_line_idx = text.char_to_line(char_idx.min(text.len_chars()));
+        let mut block_line_idx = text.char_to_line(char_idx.min(text.len_chars()));
+        // Never anchor on a folded line: the formatter would immediately skip it
+        // and the visible content would start below the requested block.
+        while block_line_idx + 1 < text.len_lines() && annotations.is_line_hidden(block_line_idx) {
+            block_line_idx += 1;
+        }
         let block_char_idx = text.line_to_char(block_line_idx);
         annotations.reset_pos(block_char_idx);
 
@@ -427,12 +432,37 @@ impl<'t> DocumentFormatter<'t> {
     pub fn next_visual_pos(&self) -> Position {
         self.visual_pos
     }
+
+    /// Fold away hidden lines without advancing the visual row. The newline is
+    /// consumed so `line_pos` and `char_pos` move on, but the next visible line
+    /// starts on the row the hidden line would have occupied.
+    fn skip_hidden_lines(&mut self) {
+        while self.annotations.is_line_hidden(self.line_pos) {
+            let mut found_newline = false;
+            while let Some(grapheme) = self.graphemes.next() {
+                self.char_pos += grapheme.chars().count();
+                if crate::LineEnding::from_str(&grapheme.to_string()).is_some() {
+                    found_newline = true;
+                    break;
+                }
+            }
+            self.line_pos += 1;
+            self.visual_pos.col = 0;
+            // The hidden line's anchors are not rendered; move every
+            // annotation layer to the start of the next visible line.
+            self.annotations.reset_pos(self.char_pos);
+            if !found_newline {
+                break;
+            }
+        }
+    }
 }
 
 impl<'t> Iterator for DocumentFormatter<'t> {
     type Item = FormattedGrapheme<'t>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.skip_hidden_lines();
         let grapheme = if self.text_fmt.soft_wrap {
             if self.word_i >= self.word_buf.len() {
                 self.advance_to_next_word();

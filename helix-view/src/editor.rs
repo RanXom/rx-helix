@@ -830,6 +830,8 @@ impl Default for ObsidianConfig {
 pub struct MarkdownConfig {
     /// Render markdown syntax markers with icons and conceals.
     pub render: bool,
+    /// Fold code fence lines (```` ``` ````) away unless the cursor is on them.
+    pub hide_code_fences: bool,
     /// Render local images in markdown buffers with the Kitty graphics protocol.
     pub images: bool,
     /// Download remote `http(s)` images with `curl` into the cache.
@@ -845,6 +847,7 @@ impl Default for MarkdownConfig {
     fn default() -> Self {
         Self {
             render: false,
+            hide_code_fences: true,
             images: false,
             download_remote_images: true,
             link_icons: Vec::new(),

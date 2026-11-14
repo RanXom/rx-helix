@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::ops::Range;
 use std::ptr::NonNull;
@@ -279,6 +280,10 @@ pub struct TextAnnotations<'a> {
     inline_annotations: Vec<Layer<'a, InlineAnnotation, Option<Highlight>>>,
     overlays: Vec<Layer<'a, Overlay, Option<Highlight>>>,
     line_annotations: Vec<(Cell<usize>, RawBox<dyn LineAnnotation + 'a>)>,
+    /// Document lines that should be folded away entirely. They are skipped
+    /// by the formatter without advancing the visual row, so the next visible
+    /// line takes their place. The cursor line should not be listed here.
+    hidden_lines: HashSet<usize>,
 }
 
 impl Debug for TextAnnotations<'_> {
@@ -368,6 +373,18 @@ impl<'a> TextAnnotations<'a> {
     /// so that virtual text lines are automatically skipped.
     pub fn clear_line_annotations(&mut self) {
         self.line_annotations.clear();
+    }
+
+    /// Fold the given document lines away. Hidden lines are not rendered and
+    /// do not occupy a visual row, so the following line moves up. The cursor
+    /// line must stay visible; callers are responsible for excluding it.
+    pub fn add_hidden_lines(&mut self, lines: impl IntoIterator<Item = usize>) -> &mut Self {
+        self.hidden_lines.extend(lines);
+        self
+    }
+
+    pub(crate) fn is_line_hidden(&self, line: usize) -> bool {
+        self.hidden_lines.contains(&line)
     }
 
     pub(crate) fn next_inline_annotation_at(
