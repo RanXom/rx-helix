@@ -56,6 +56,9 @@ pub struct MarkdownRender {
 struct LineRender {
     background: Option<Style>,
     paints: Vec<Paint>,
+    /// Inline-code backticks, painted even on the cursor line and selections
+    /// unless the cursor is inside that span.
+    inline_code_paints: Vec<Paint>,
     /// Display-column ranges to remove after painting (emphasis/link
     /// delimiters). Content to the right is shifted left, matching Neovim
     /// conceal rather than leaving a gap.
@@ -397,9 +400,21 @@ impl MarkdownRender {
             }
         }
 
+        let markdown_config = doc.config.load().markdown.clone();
+        let link_custom: Vec<MarkdownLinkIcon> = markdown_config.link_icons.clone();
+        let hide_code_fences = markdown_config.hide_code_fences;
+
         let anchor = anchor.min(text.len_chars());
         let start_line = text.char_to_line(anchor);
-        let end_line = (start_line + height as usize + 2).min(text.len_lines());
+        // Folded fence lines do not consume a visual row, so the viewport can
+        // contain more document lines than `height`. Parse a generous margin so
+        // code blocks and inline code at the bottom are still decorated.
+        let line_margin = if hide_code_fences {
+            height as usize * 2
+        } else {
+            height as usize
+        };
+        let end_line = (start_line + line_margin + 2).min(text.len_lines());
 
         let heading_fallback = theme.get("markup.heading");
         let list_style = theme.get("markup.list");
@@ -421,9 +436,6 @@ impl MarkdownRender {
         let table_head_style = plain(theme.get("markup.heading"));
         let table_body_style = plain(theme.get("ui.text"));
 
-        let markdown_config = doc.config.load().markdown.clone();
-        let link_custom: Vec<MarkdownLinkIcon> = markdown_config.link_icons.clone();
-        let hide_code_fences = markdown_config.hide_code_fences;
         let available_width = view.inner_width(doc) as usize;
         // Walk back to the start of a table that straddles the top of the
         // viewport so a scrolled-off header still has a known layout.
@@ -790,7 +802,15 @@ impl MarkdownRender {
                 );
                 paint_inline_emphasis(&mut render, line_idx, &chars, inline_skip, tab_width);
                 if let Some(style) = inline_code_background {
-                    paint_inline_code(&mut render, line_idx, line_start, &chars, style, tab_width);
+                    paint_inline_code(
+                        &mut render,
+                        line_idx,
+                        line_start,
+                        &chars,
+                        style,
+                        tab_width,
+                        cursor,
+                    );
                 }
             }
         }
@@ -817,6 +837,23 @@ impl MarkdownRender {
     }
 }
 
+fn draw_paint(renderer: &mut TextRenderer, pos: LinePos, paint: &Paint) {
+    if paint.col < renderer.offset.col {
+        return;
+    }
+    let x = renderer.viewport.x + (paint.col - renderer.offset.col) as u16;
+    if x >= renderer.viewport.right() {
+        return;
+    }
+    renderer.set_stringn(
+        x,
+        pos.visual_line,
+        &paint.text,
+        (renderer.viewport.right().saturating_sub(x)) as usize,
+        paint.style,
+    );
+}
+
 impl Decoration for MarkdownRender {
     fn decorate_line(&mut self, renderer: &mut TextRenderer, pos: LinePos) {
         let Some(line) = self.lines.get(&pos.doc_line) else {
@@ -839,74 +876,71 @@ impl Decoration for MarkdownRender {
     }
 
     fn decorate_line_end(&mut self, renderer: &mut TextRenderer, pos: LinePos) {
-        if self.concealed(pos.doc_line) {
-            return;
-        }
         let Some(line) = self.lines.get(&pos.doc_line) else {
             return;
         };
+        let concealed = self.concealed(pos.doc_line);
 
-        if let Some(style) = line.rule {
-            let rule = "─".repeat(renderer.viewport.width as usize);
-            renderer.set_stringn(
-                renderer.viewport.x,
-                pos.visual_line,
-                &rule,
-                renderer.viewport.width as usize,
-                style,
-            );
-            return;
-        }
-
-        if let Some(fence) = &line.fence {
-            let blank = " ".repeat(renderer.viewport.width as usize);
-            renderer.set_stringn(
-                renderer.viewport.x,
-                pos.visual_line,
-                &blank,
-                renderer.viewport.width as usize,
-                fence.background,
-            );
-            if let (Some((col, text, style)), true) = (&fence.text, pos.first_visual_line) {
-                if *col >= renderer.offset.col {
-                    let x = renderer.viewport.x + (col - renderer.offset.col) as u16;
-                    renderer.set_stringn(
-                        x,
-                        pos.visual_line,
-                        text,
-                        (renderer.viewport.right().saturating_sub(x)) as usize,
-                        *style,
-                    );
-                }
+        if !concealed {
+            if let Some(style) = line.rule {
+                let rule = "─".repeat(renderer.viewport.width as usize);
+                renderer.set_stringn(
+                    renderer.viewport.x,
+                    pos.visual_line,
+                    &rule,
+                    renderer.viewport.width as usize,
+                    style,
+                );
+                return;
             }
-            return;
+
+            if let Some(fence) = &line.fence {
+                let blank = " ".repeat(renderer.viewport.width as usize);
+                renderer.set_stringn(
+                    renderer.viewport.x,
+                    pos.visual_line,
+                    &blank,
+                    renderer.viewport.width as usize,
+                    fence.background,
+                );
+                if let (Some((col, text, style)), true) = (&fence.text, pos.first_visual_line) {
+                    if *col >= renderer.offset.col {
+                        let x = renderer.viewport.x + (col - renderer.offset.col) as u16;
+                        renderer.set_stringn(
+                            x,
+                            pos.visual_line,
+                            text,
+                            (renderer.viewport.right().saturating_sub(x)) as usize,
+                            *style,
+                        );
+                    }
+                }
+                return;
+            }
         }
 
         if pos.first_visual_line {
-            for paint in &line.paints {
-                if paint.col < renderer.offset.col {
-                    continue;
+            if !concealed {
+                for paint in &line.paints {
+                    draw_paint(renderer, pos, paint);
                 }
-                let x = renderer.viewport.x + (paint.col - renderer.offset.col) as u16;
-                if x >= renderer.viewport.right() {
-                    continue;
-                }
-                renderer.set_stringn(
-                    x,
-                    pos.visual_line,
-                    &paint.text,
-                    (renderer.viewport.right().saturating_sub(x)) as usize,
-                    paint.style,
-                );
             }
 
-            // Apply right-to-left so earlier ranges stay in their original
-            // columns. Painting happened first, so icons/labels shift with
-            // the concealed text and retain their styling.
-            let mut removals = line.removals.clone();
-            removals.sort_unstable_by_key(|(start, _)| std::cmp::Reverse(*start));
-            for (start, end) in removals {
-                renderer.shift_line_left(pos.visual_line, start, end);
+            // Inline-code backticks are concealed even on the cursor line and
+            // selections; only the span containing the cursor keeps them.
+            for paint in &line.inline_code_paints {
+                draw_paint(renderer, pos, paint);
+            }
+
+            if !concealed {
+                // Apply right-to-left so earlier ranges stay in their original
+                // columns. Painting happened first, so icons/labels shift with
+                // the concealed text and retain their styling.
+                let mut removals = line.removals.clone();
+                removals.sort_unstable_by_key(|(start, _)| std::cmp::Reverse(*start));
+                for (start, end) in removals {
+                    renderer.shift_line_left(pos.visual_line, start, end);
+                }
             }
         }
     }
@@ -2021,19 +2055,23 @@ fn paint_inline_code(
     chars: &[char],
     style: Style,
     tab_width: usize,
+    cursor: usize,
 ) {
     for (open_start, open_end, close_start, close_end) in inline_code_ranges(chars) {
+        let cursor_in_span = cursor >= line_start + open_start && cursor < line_start + close_end;
         let line_render = render.lines.entry(line_idx).or_default();
-        line_render.paints.push(Paint {
-            col: display_col(chars, open_start, tab_width),
-            text: " ".repeat(open_end - open_start),
-            style,
-        });
-        line_render.paints.push(Paint {
-            col: display_col(chars, close_start, tab_width),
-            text: " ".repeat(close_end - close_start),
-            style,
-        });
+        if !cursor_in_span {
+            line_render.inline_code_paints.push(Paint {
+                col: display_col(chars, open_start, tab_width),
+                text: " ".repeat(open_end - open_start),
+                style,
+            });
+            line_render.inline_code_paints.push(Paint {
+                col: display_col(chars, close_start, tab_width),
+                text: " ".repeat(close_end - close_start),
+                style,
+            });
+        }
         render.inline_code.push(InlineCode {
             start: line_start + open_end,
             end: line_start + close_start,
@@ -2080,13 +2118,24 @@ fn inline_code_ranges(chars: &[char]) -> Vec<(usize, usize, usize, usize)> {
             chars[*idx] == '`'
                 && chars[*idx..].iter().take_while(|ch| **ch == '`').count() >= open_len
         }) else {
-            break;
+            // No matching close: this run is literal text. Keep scanning so a
+            // later pair (for example after an empty `` run) is still found.
+            index = open_end;
+            continue;
         };
         let close_len = chars[close_start..]
             .iter()
             .take_while(|ch| **ch == '`')
             .count();
-        ranges.push((open_start, open_end, close_start, close_start + close_len));
+        // A code span must contain at least one non-whitespace character.
+        // Empty or all-space pairs are left as ordinary text (and keep their
+        // backticks visible).
+        let has_content = chars[open_end..close_start]
+            .iter()
+            .any(|ch| !ch.is_whitespace());
+        if has_content {
+            ranges.push((open_start, open_end, close_start, close_start + close_len));
+        }
         index = close_start + close_len;
     }
     ranges
@@ -2216,6 +2265,18 @@ mod tests {
     fn finds_inline_code_ranges() {
         let line: Vec<char> = "a `code` b".chars().collect();
         assert_eq!(inline_code_ranges(&line), vec![(2, 3, 7, 8)]);
+    }
+
+    #[test]
+    fn inline_code_ignores_whitespace_only_spans() {
+        let line: Vec<char> = "` ` and `x`".chars().collect();
+        assert_eq!(inline_code_ranges(&line), vec![(8, 9, 10, 11)]);
+    }
+
+    #[test]
+    fn inline_code_finds_pairs_after_unmatched_runs() {
+        let line: Vec<char> = "`` and `x`".chars().collect();
+        assert_eq!(inline_code_ranges(&line), vec![(7, 8, 9, 10)]);
     }
 
     #[test]

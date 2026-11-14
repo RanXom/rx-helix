@@ -358,7 +358,8 @@ a theme can opt into render-markdown-style Diff backgrounds with
 The fallback still uses existing UI scopes (`ui.selection`, `ui.menu`,
 `ui.popup`, `ui.cursorline`). Icons use `markup.heading.1`–`.6`; rules use
 `ui.linenr`; code blocks get a full-width `ui.cursorline` background and inline
-code gets a background.
+code gets a background. Inline-code backticks are concealed unless the cursor
+is inside that span; empty or all-space backtick pairs stay visible.
 Code fence lines are folded away unless the cursor is on them, so the first
 code line follows the preceding text directly. Set `hide-code-fences = false`
 to keep the fence line as a blank header row instead.
