@@ -30,6 +30,7 @@ mod item;
 mod path;
 mod request;
 mod resolve;
+mod snippets;
 mod word;
 
 async fn handle_response(
@@ -121,6 +122,12 @@ pub fn trigger_auto_completion(editor: &Editor, trigger_char_only: bool) {
         return;
     }
     let (view, doc): (&helix_view::View, &helix_view::Document) = current_ref!(editor);
+    // While a snippet session is active, typing edits placeholders. Auto
+    // completion would pop up on every placeholder character and steal Tab
+    // from tabstop navigation. Manual completion still works.
+    if doc.active_snippet.is_some() {
+        return;
+    }
     let mut text = doc.text().slice(..);
     let cursor = doc.selection(view.id).primary().cursor(text);
     text = doc.text().slice(..cursor);
@@ -153,6 +160,9 @@ pub fn trigger_auto_completion(editor: &Editor, trigger_char_only: bool) {
         return;
     }
 
+    // One character by default so single-letter snippet prefixes (`b`, `i`,
+    // `n`, `a`, `p`, ...) are reachable. Users with slow language servers can
+    // raise `editor.completion-trigger-len`.
     let is_auto_trigger = !trigger_char_only
         && doc
             .text()

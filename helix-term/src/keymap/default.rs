@@ -401,7 +401,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "C-d" | "del" => delete_char_forward,
         "C-j" | "ret" => insert_newline,
         "tab" => smart_tab,
-        "S-tab" => insert_tab,
+        "S-tab" => smart_backtab,
 
         "up" => move_visual_line_up,
         "down" => move_visual_line_down,

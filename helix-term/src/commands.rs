@@ -480,6 +480,7 @@ impl MappableCommand {
         extend_to_line_end_newline, "Extend to line end",
         signature_help, "Show signature help",
         smart_tab, "Insert tab if all cursors have all whitespace to their left; otherwise, run a separate command.",
+        smart_backtab, "Go to the previous snippet tabstop, or insert a tab when no snippet is active.",
         insert_tab, "Insert tab char",
         insert_newline, "Insert newline char",
         insert_char_interactive, "Insert an interactively-chosen char",
@@ -4596,6 +4597,13 @@ pub mod insert {
     }
 
     pub fn smart_tab(cx: &mut Context) {
+        // Snippet navigation takes precedence over indentation, like
+        // LuaSnip's `snippet_forward` before the fallback.
+        if current_ref!(cx.editor).1.active_snippet.is_some() {
+            goto_next_tabstop(cx);
+            return;
+        }
+
         let (view, doc) = current_ref!(cx.editor);
         let view_id = view.id;
 
@@ -4612,16 +4620,21 @@ pub mod insert {
             });
 
             if !cursors_after_whitespace {
-                if doc.active_snippet.is_some() {
-                    goto_next_tabstop(cx);
-                } else {
-                    move_parent_node_end(cx);
-                }
+                move_parent_node_end(cx);
                 return;
             }
         }
 
         insert_tab(cx);
+    }
+
+    pub fn smart_backtab(cx: &mut Context) {
+        if current_ref!(cx.editor).1.active_snippet.is_some() {
+            goto_prev_tabstop(cx);
+        } else {
+            // Preserve the default S-Tab behaviour outside snippets.
+            insert_tab(cx);
+        }
     }
 
     pub fn insert_tab(cx: &mut Context) {
@@ -7243,6 +7256,9 @@ fn goto_next_tabstop_impl(cx: &mut Context, direction: Direction) {
             .map(|selection| (selection, false)),
     };
     let Some((selection, last_tabstop)) = tabstop else {
+        // Already at the first tabstop: keep the snippet active instead of
+        // dropping it from `take()` above.
+        doc.active_snippet = Some(snippet);
         return;
     };
     doc.set_selection(view_id, selection);

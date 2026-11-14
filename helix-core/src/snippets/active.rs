@@ -229,6 +229,7 @@ mod tests {
 
     use ropey::Rope;
 
+    use crate::movement::Direction;
     use crate::snippets::{ActiveSnippet, Snippet, SnippetRenderCtx};
     use crate::{Selection, Transaction};
 
@@ -249,6 +250,25 @@ mod tests {
         assert!(edit.apply(&mut doc));
         snippet.map(edit.changes());
         assert!(!snippet.is_valid(&Selection::point(4)))
+    }
+
+    #[test]
+    fn prev_tabstop_at_start_returns_none() {
+        let snippet = Snippet::parse("x ${1:a} ${2:b}").unwrap();
+        let mut doc = Rope::from("\n");
+        let (transaction, _, rendered) = snippet.render(
+            &doc,
+            &Selection::point(0),
+            |_| (0, 0),
+            &mut SnippetRenderCtx::test_ctx(),
+        );
+        assert!(transaction.apply(&mut doc));
+        let mut active = ActiveSnippet::new(rendered).unwrap();
+        let first = active.tabstop_selection(0, Direction::Forward);
+        assert!(active.prev_tabstop(&first).is_none());
+        let (second, last) = active.next_tabstop(&first);
+        assert!(!last);
+        assert!(active.prev_tabstop(&second).is_some());
     }
 
     #[test]

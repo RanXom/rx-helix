@@ -106,8 +106,12 @@ impl CompletionItem {
     pub fn provider_priority(&self) -> i8 {
         match self {
             CompletionItem::Lsp(item) => item.provider_priority,
-            // sorting path completions after LSP for now
-            CompletionItem::Other(_) => 1,
+            // Snippets win ties against LSP/word/path items; other local
+            // providers sort after LSP for now.
+            CompletionItem::Other(item) => match item.provider {
+                CompletionProvider::Snippet => -1,
+                _ => 1,
+            },
         }
     }
 

@@ -248,10 +248,16 @@ fn request_completions(
     ) {
         requests.spawn_blocking(path_completion_request);
     }
+    let snippet_savepoint = savepoint.clone();
     if let Some(word_completion_request) =
         word::completion(editor, trigger, handle.clone(), savepoint)
     {
         requests.spawn_blocking(word_completion_request);
+    }
+    if let Some(snippet_completion_request) =
+        super::snippets::completion(editor, trigger, handle.clone(), snippet_savepoint)
+    {
+        requests.spawn_blocking(snippet_completion_request);
     }
 
     let ui = compositor.find::<ui::EditorView>().unwrap();
