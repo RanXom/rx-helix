@@ -76,6 +76,10 @@ grep-matcher = "0.1"
 pulldown-cmark = { version = "0.13", default-features = false }
 thiserror.workspace = true
 
+# sixel image rendering
+icy_sixel = "0.7.0"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 # opening URLs
 open = "5.3.5"
 

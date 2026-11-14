@@ -398,14 +398,20 @@ navigating; non-table cursor lines and selections still show raw Markdown so
 their markers stay editable.
 Code fences keep their tree-sitter highlighting.
 
-Local images are drawn inline when the terminal speaks the Kitty graphics
-protocol:
+Local images are drawn inline when the terminal speaks Kitty graphics or
+sixel:
 
 ```toml
 [editor.markdown]
 render = true
 images = true
+# auto | kitty | sixel | none
+image-protocol = "auto"
 ```
+
+`auto` chooses Kitty graphics where available and sixel in foot, mlterm, and
+other sixel terminals. The sixel encoder is built into rx-helix; no separate
+`libsixel`, `chafa`, or `img2sixel` install is required.
 
 `![](assets/foo.png)` and `![[foo.png]]` resolve relative to the note, then the
 vault root. The Markdown line keeps its alt text/icon visible and the image

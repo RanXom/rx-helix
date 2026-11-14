@@ -77,6 +77,9 @@ where
     /// Set to request a full clear. The erase is deferred to the next `flush` so it is emitted
     /// inside the same synchronized-output frame as the repaint to avoid painting blank frames
     force_clear: bool,
+    /// Set when the screen was cleared. Terminal image protocols that draw
+    /// outside the cell grid (sixel) must re-place their images after a clear.
+    image_redraw: bool,
 }
 
 /// Default terminal size: 80 columns, 24 lines
@@ -119,6 +122,7 @@ where
             last_cursor_position: None,
             viewport: options.viewport,
             force_clear: false,
+            image_redraw: false,
         })
     }
 
@@ -276,9 +280,16 @@ where
     /// synchronized frame with the repaint.
     pub fn clear(&mut self) -> io::Result<()> {
         self.force_clear = true;
+        self.image_redraw = true;
         // Reset the back buffer to make sure the next update will redraw everything.
         self.buffers[1 - self.current].reset();
         Ok(())
+    }
+
+    /// Whether the screen was cleared since the last call. Sixel placements
+    /// are not part of the cell diff, so they must be re-emitted afterwards.
+    pub fn take_image_redraw(&mut self) -> bool {
+        std::mem::take(&mut self.image_redraw)
     }
 
     /// Queries the real size of the backend.

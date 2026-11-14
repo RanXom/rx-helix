@@ -319,7 +319,8 @@ Optional display-only markdown rendering. Disabled by default.
 | --- | ----------- | ------- |
 | `render` | Replace markdown markers with icons and frame characters | `false` |
 | `hide-code-fences` | Fold ` ``` ` fence lines unless the cursor is on them | `true` |
-| `images` | Draw local images inline with the Kitty graphics protocol | `false` |
+| `images` | Draw local images inline | `false` |
+| `image-protocol` | `auto`, `kitty`, `sixel`, or `none` | `"auto"` |
 | `download_remote_images` | Download remote `http(s)` images with `curl` | `true` |
 | `link_icons` | Custom `{ pattern, icon }` link icons (checked before built-ins) | `[]` |
 
@@ -364,8 +365,12 @@ following quote lines, and pipe tables get `│` borders with a header
 background.
 
 With `images`, `![](assets/foo.png)` and `![[foo.png]]` are drawn at their line
-when the terminal supports Kitty graphics. Paths resolve relative to the note
-and then the vault root. Each image reserves virtual lines so following text
+when the terminal supports Kitty graphics or sixel. `image-protocol = "auto"`
+picks Kitty graphics in Kitty-like terminals and sixel in foot, mlterm, and
+other sixel terminals. Set it to `kitty` or `sixel` to force a protocol, or
+`none` to disable images. Sixel encoding is built in; no separate
+`libsixel`/`chafa`/`img2sixel` install is needed. Paths resolve relative to the
+note and then the vault root. Each image reserves virtual lines so following text
 reflows instead of being covered. Partially scrolled images are cropped to
 the visible rows. Remote `http(s)` images download once with `curl` into the
 cache (disable with `download_remote_images = false`); opening an image file

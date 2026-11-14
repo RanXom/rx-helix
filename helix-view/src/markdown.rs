@@ -21,6 +21,31 @@ use crate::{Document, DocumentId, View, ViewId};
 
 const MAX_HEIGHT_PERCENT: f32 = 0.5;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageProtocol {
+    Kitty,
+    Sixel,
+}
+
+/// Resolve the image protocol for the current config and environment.
+pub fn image_protocol(config: &crate::editor::MarkdownConfig) -> Option<ImageProtocol> {
+    use crate::editor::ImageProtocolConfig;
+    match config.image_protocol {
+        ImageProtocolConfig::None => None,
+        ImageProtocolConfig::Kitty => Some(ImageProtocol::Kitty),
+        ImageProtocolConfig::Sixel => Some(ImageProtocol::Sixel),
+        ImageProtocolConfig::Auto => {
+            if kitty_supported() {
+                Some(ImageProtocol::Kitty)
+            } else if sixel_supported() {
+                Some(ImageProtocol::Sixel)
+            } else {
+                None
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ImageLayout {
     pub path: PathBuf,
@@ -70,7 +95,7 @@ const IMAGE_LAYOUT_CACHE_ENTRIES: usize = 8;
 /// as text. Shared by layout, placement, and viewport blanking.
 pub fn is_hijacked_image(doc: &Document) -> bool {
     let config = doc.config.load();
-    if !config.markdown.images || !kitty_supported() {
+    if !config.markdown.images || image_protocol(&config.markdown).is_none() {
         return false;
     }
     if doc.language_name() == Some("markdown") {
@@ -89,7 +114,7 @@ pub fn is_hijacked_image(doc: &Document) -> bool {
 /// Image files opened directly get a single full-view layout (hijack).
 pub fn visible_images(doc: &Document, view: &View) -> Vec<ImageLayout> {
     let config = doc.config.load();
-    if !config.markdown.images || !kitty_supported() {
+    if !config.markdown.images || image_protocol(&config.markdown).is_none() {
         return Vec::new();
     }
     if doc.language_name() != Some("markdown") {
@@ -134,7 +159,15 @@ pub fn visible_images(doc: &Document, view: &View) -> Vec<ImageLayout> {
         }
     }
     let start_line = text.char_to_line(view_offset.anchor.min(text.len_chars()));
-    let end_line = (start_line + inner.height as usize + 2).min(text.len_lines());
+    // Folded fence lines do not consume a visual row, so the viewport can
+    // contain more document lines than its height. Match the markdown
+    // renderer's margin so images near the bottom are still laid out.
+    let line_margin = if config.markdown.hide_code_fences {
+        inner.height as usize * 2
+    } else {
+        inner.height as usize
+    };
+    let end_line = (start_line + line_margin + 2).min(text.len_lines());
     let (cell_width, cell_height) = cell_size();
     let max_rows = ((inner.height as f32 * MAX_HEIGHT_PERCENT).floor() as u16).max(2);
     let max_cols = inner.width;
@@ -284,9 +317,19 @@ impl LineAnnotation for ImageLineAnnotation {
     }
 }
 
-fn kitty_supported() -> bool {
+pub fn kitty_supported() -> bool {
     std::env::var_os("KITTY_WINDOW_ID").is_some()
         || std::env::var("TERM").is_ok_and(|term| term.contains("kitty"))
+}
+
+pub fn sixel_supported() -> bool {
+    std::env::var("TERM").is_ok_and(|term| {
+        term.contains("foot")
+            || term.contains("sixel")
+            || term.contains("mlterm")
+            || term.contains("yaft")
+            || term.contains("contour")
+    })
 }
 
 fn fit_cells(
@@ -972,7 +1015,7 @@ fn webp_dimensions(data: &[u8]) -> Option<(u32, u32)> {
 }
 
 #[cfg(unix)]
-fn cell_size() -> (f32, f32) {
+pub fn cell_size() -> (f32, f32) {
     let mut size = std::mem::MaybeUninit::<libc::winsize>::zeroed();
     let ok = unsafe { libc::ioctl(1, libc::TIOCGWINSZ, size.as_mut_ptr()) } == 0;
     let size = unsafe { size.assume_init() };
@@ -994,7 +1037,7 @@ fn cell_size() -> (f32, f32) {
 }
 
 #[cfg(not(unix))]
-fn cell_size() -> (f32, f32) {
+pub fn cell_size() -> (f32, f32) {
     (8.0, 16.0)
 }
 
@@ -1008,6 +1051,27 @@ mod tests {
         assert_eq!(links.len(), 2);
         assert_eq!(links[0].1, "assets/a.png");
         assert_eq!(links[1].1, "b.png");
+    }
+
+    #[test]
+    fn image_protocol_config_overrides_environment() {
+        use crate::editor::{ImageProtocolConfig, MarkdownConfig};
+
+        let config = MarkdownConfig {
+            image_protocol: ImageProtocolConfig::Kitty,
+            ..Default::default()
+        };
+        assert_eq!(image_protocol(&config), Some(ImageProtocol::Kitty));
+        let config = MarkdownConfig {
+            image_protocol: ImageProtocolConfig::Sixel,
+            ..Default::default()
+        };
+        assert_eq!(image_protocol(&config), Some(ImageProtocol::Sixel));
+        let config = MarkdownConfig {
+            image_protocol: ImageProtocolConfig::None,
+            ..Default::default()
+        };
+        assert_eq!(image_protocol(&config), None);
     }
 
     #[test]
