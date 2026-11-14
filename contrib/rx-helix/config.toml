@@ -170,6 +170,10 @@ image-protocol = "auto"
 enable = true
 language = "en_US"
 
-# Space shortcut for the centered Create File path prompt.
+# Space shortcuts.
 [keys.normal.space]
+# Centered Create File path prompt.
 n = "create_file"
+# Buffer management (Vim :bd / :bd!).
+x = ":buffer-close"
+X = ":buffer-close!"
