@@ -399,28 +399,36 @@ impl Application {
             .terminal
             .autoresize()
             .expect("Unable to determine terminal size");
+        let image_redraw = full_redraw || self.terminal.take_image_redraw();
 
         // TODO: need to recalculate view tree if necessary
 
         let surface = self.terminal.current_buffer_mut();
 
         self.compositor.render(area, surface, &mut cx);
+        let has_overlay = self.compositor.has_overlay();
+        if has_overlay {
+            // Keep images from painting over pickers/prompts/menus, mirroring
+            // image.nvim's window_overlap_clear behavior. Virtual lines stay
+            // reserved so text doesn't shift when the overlay closes. Keep
+            // the transmitted image data so closing the overlay only re-places
+            // images instead of re-sending them all. Erase before the draw so
+            // the overlay's own text is not wiped.
+            crate::ui::image::clear_placements();
+        } else {
+            // Erase stale sixel placements before the TUI paints this frame;
+            // erasing afterwards would wipe text that shifted into the old
+            // image area.
+            crate::ui::image::prepare(&self.editor, image_redraw);
+        }
         let (pos, kind) = self.compositor.cursor(area, &self.editor);
         // reset cursor cache
         self.editor.cursor_cache.reset();
 
         let pos = pos.map(|pos| (pos.col as u16, pos.row as u16));
         self.terminal.draw(pos, kind).unwrap();
-        let image_redraw = full_redraw || self.terminal.take_image_redraw();
-        if self.compositor.has_overlay() {
-            // Keep images from painting over pickers/prompts/menus, mirroring
-            // image.nvim's window_overlap_clear behavior. Virtual lines stay
-            // reserved so text doesn't shift when the overlay closes. Keep
-            // the transmitted image data so closing the overlay only re-places
-            // images instead of re-sending them all.
-            crate::ui::image::clear_placements();
-        } else {
-            crate::ui::image::render(&self.editor, image_redraw);
+        if !has_overlay {
+            crate::ui::image::render(&self.editor);
         }
     }
 
