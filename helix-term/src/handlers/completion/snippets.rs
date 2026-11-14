@@ -5,7 +5,7 @@
 //! selected, repeated tabstops are mirrors, and `Tab`/`S-Tab` walk them.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -171,6 +171,17 @@ fn snippets_for(language: &str) -> Arc<Vec<SnippetDef>> {
     }
     add_builtin_extras(&language, &mut definitions, &mut seen);
 
+    // Deterministic ordering: an exact prefix (`for`) must come before
+    // prefixes that merely start with the typed word (`foreach`, `forr`).
+    // `HashMap` iteration would otherwise randomize the menu order.
+    definitions.sort_by(|a, b| {
+        let a = &a.prefixes[0];
+        let b = &b.prefixes[0];
+        a.len()
+            .cmp(&b.len())
+            .then_with(|| a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()))
+    });
+
     let definitions = Arc::new(definitions);
     cache.lock().unwrap().insert(language, definitions.clone());
     definitions
@@ -180,7 +191,7 @@ fn load_file(path: &Path, definitions: &mut Vec<SnippetDef>, seen: &mut HashSet<
     let Ok(bytes) = fs::read(path) else {
         return;
     };
-    let Ok(raw) = serde_json::from_slice::<HashMap<String, RawSnippet>>(&bytes) else {
+    let Ok(raw) = serde_json::from_slice::<BTreeMap<String, RawSnippet>>(&bytes) else {
         log::debug!("snippets: failed to parse {}", path.display());
         return;
     };
@@ -188,7 +199,7 @@ fn load_file(path: &Path, definitions: &mut Vec<SnippetDef>, seen: &mut HashSet<
         let Some(prefix) = snippet.prefix else {
             continue;
         };
-        let prefixes: Vec<String> = match prefix {
+        let mut prefixes: Vec<String> = match prefix {
             RawPrefix::One(prefix) => vec![prefix],
             RawPrefix::Many(prefixes) => prefixes,
         }
@@ -199,6 +210,13 @@ fn load_file(path: &Path, definitions: &mut Vec<SnippetDef>, seen: &mut HashSet<
         if prefixes.is_empty() {
             continue;
         }
+        // The shortest prefix is the primary label and the dedupe key, so a
+        // snippet with `["bold and italic", "bi"]` is listed as `bi`.
+        prefixes.sort_by(|a, b| {
+            a.len()
+                .cmp(&b.len())
+                .then_with(|| a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()))
+        });
         let Some(body) = snippet.body else {
             continue;
         };
@@ -595,6 +613,19 @@ mod tests {
                 "no snippets loaded for {language}"
             );
         }
+    }
+
+    #[test]
+    fn exact_prefix_sorts_before_longer_prefixes() {
+        let definitions = snippets_for("cpp");
+        let position = |prefix: &str| {
+            definitions
+                .iter()
+                .position(|definition| definition.prefixes[0].eq_ignore_ascii_case(prefix))
+                .unwrap_or_else(|| panic!("missing snippet `{prefix}`"))
+        };
+        assert!(position("for") < position("forr"));
+        assert!(position("forr") < position("foreach"));
     }
 
     #[test]
