@@ -51,11 +51,22 @@ fn state() -> &'static Mutex<ImageState> {
     STATE.get_or_init(|| Mutex::new(ImageState::default()))
 }
 
-pub fn render(editor: &Editor, force: bool) {
-    let protocol = image_protocol(&editor.config().markdown);
-    match protocol {
+/// Erase stale image placements before the TUI draws the frame. Sixel images
+/// live outside the cell diff, and erasing after the draw would wipe text that
+/// just shifted into the old image area.
+pub fn prepare(editor: &Editor, force: bool) {
+    match image_protocol(&editor.config().markdown) {
+        Some(ImageProtocol::Kitty) => {}
+        Some(ImageProtocol::Sixel) => sixel::prepare(editor, force),
+        None => clear_placements(),
+    }
+}
+
+/// Place images after the TUI draw.
+pub fn render(editor: &Editor) {
+    match image_protocol(&editor.config().markdown) {
         Some(ImageProtocol::Kitty) => render_kitty(editor),
-        Some(ImageProtocol::Sixel) => sixel::render(editor, force),
+        Some(ImageProtocol::Sixel) => sixel::render(),
         None => {}
     }
 }
@@ -351,6 +362,8 @@ mod sixel {
     struct State {
         cache: HashMap<SixelKey, CachedSixel>,
         placed: Vec<PlacedSixel>,
+        /// New placements computed before the TUI draw and emitted after it.
+        pending: Option<Vec<PlacedSixel>>,
         /// Editor background used when erasing the previous image area.
         background: Option<Color>,
     }
@@ -360,7 +373,11 @@ mod sixel {
         STATE.get_or_init(|| Mutex::new(State::default()))
     }
 
-    pub fn render(editor: &Editor, force: bool) {
+    /// Erase the previous placement and encode the next one. Runs *before*
+    /// the TUI draw so the erase cannot wipe the text that just shifted into
+    /// the old image area; the actual sixel payload is emitted afterwards by
+    /// [`render`].
+    pub fn prepare(editor: &Editor, force: bool) {
         if !sixel_supported() {
             return;
         }
@@ -373,6 +390,7 @@ mod sixel {
         let placements = compute_placements(editor);
         let mut state = state().lock().unwrap();
         if placements.is_empty() && state.placed.is_empty() {
+            state.pending = None;
             return;
         }
 
@@ -403,6 +421,7 @@ mod sixel {
             new_placed.len()
         );
         if !force && new_placed == state.placed {
+            state.pending = None;
             return;
         }
 
@@ -413,6 +432,28 @@ mod sixel {
             background,
             &mut out,
         );
+        out.push_str("\x1b8");
+        state.pending = Some(new_placed);
+        drop(state);
+        flush_output(&out);
+    }
+
+    /// Emit the placements prepared for this frame. Runs after the TUI draw.
+    pub fn render() {
+        if !sixel_supported() {
+            return;
+        }
+        let mut state = state().lock().unwrap();
+        let Some(new_placed) = state.pending.take() else {
+            return;
+        };
+        if new_placed.is_empty() {
+            state.placed.clear();
+            return;
+        }
+
+        let mut out = String::new();
+        out.push_str("\x1b7");
         for placed in &new_placed {
             let Some(data) = state.cache.get(&placed.key) else {
                 continue;
@@ -435,6 +476,7 @@ mod sixel {
             return;
         }
         let mut state = state().lock().unwrap();
+        state.pending = None;
         if state.placed.is_empty() {
             return;
         }
