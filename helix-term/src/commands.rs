@@ -7243,6 +7243,7 @@ fn goto_prev_tabstop(cx: &mut Context) {
 }
 
 fn goto_next_tabstop_impl(cx: &mut Context, direction: Direction) {
+    let mode = cx.editor.mode();
     let (view, doc) = current!(cx.editor);
     let view_id = view.id;
     let Some(mut snippet) = doc.active_snippet.take() else {
@@ -7265,8 +7266,12 @@ fn goto_next_tabstop_impl(cx: &mut Context, direction: Direction) {
     if !last_tabstop {
         doc.active_snippet = Some(snippet)
     }
-    if cx.editor.mode() == Mode::Insert {
+    if mode == Mode::Insert {
         cx.on_next_key_fallback(|cx, key| {
+            // Remove the placeholder text before inserting. The active tabstop
+            // range is mapped with `Assoc::Before`/`Assoc::After` so it grows
+            // over the inserted text instead of collapsing, which keeps
+            // `S-Tab` back to the tabstop working.
             if let Some(c) = key.char() {
                 let (view, doc) = current!(cx.editor);
                 if let Some(snippet) = &doc.active_snippet {
