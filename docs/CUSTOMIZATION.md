@@ -368,6 +368,17 @@ each line, so movement, editing, saving, and searching still see ordinary
 markdown. The cursor line and visual selections show raw markdown so markers
 stay editable and readable.
 
+Local snippet completions are available in every language covered by the
+vendored friendly-snippets set (C/C++, Rust, Python, JavaScript/TypeScript,
+Go, Lua, ...): type a prefix such as `for`/`gfor`, `fn`, or `if` and pick the
+`snippet` item. Markdown additionally provides bold/italic, headings, links,
+callouts, and tables from `2x1table` through `7x7table` (plus a `gfor` C++
+loop with editable parts). The cursor lands in the first placeholder; typing
+replaces it, `Tab`/`S-Tab` walk placeholders, and repeated `$n` placeholders
+are mirrors that update together. The session ends when you Tab past the last
+placeholder or move the cursor outside the snippet. Auto-completion pauses
+while a snippet is active; manual completion still works.
+
 Links, wiki links, and callouts are decorated without shifting text:
 `[[target|alias]]` shows `󱗖 alias`, `[label](url)` keeps the label and puts an
 icon where the destination was, `<url>` shows its icon plus the address,
