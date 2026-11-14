@@ -27,7 +27,11 @@ all driven by plain `config.toml`, with no plugins or package manager.
 - **Themed pickers** — Telescope/mini.pick-style roles, centered Quick Switch
   titles, colored directory prefixes, and live theme reloads.
 - **Markdown workspace** — rendered headings, callouts, tables, inline code
-  backgrounds, local images, wiki links, and Hunspell spell checking.
+  backgrounds, inline images (Kitty graphics or sixel), wiki links, and
+  Hunspell spell checking.
+- **Snippet completion** — the full friendly-snippets library for every
+  language, with placeholders, mirrors, and `Tab`/`S-Tab` navigation that match
+  a Neovim blink.cmp + LuaSnip setup.
 - **Syntax on by default** — 300+ Tree-sitter grammars built into the install,
   with a generic `.conf` fallback and targeted nginx/systemd/hyprlang/bitbake,
   tmux, and fontconfig detection.
@@ -115,8 +119,25 @@ buffer overlays, so the file text is unchanged.
 - Tables render inline code, emphasis, strong text, strikethrough, links, wiki
   links, footnotes, and autolinks; a row stays rendered while the cursor is on it.
 - Inline code backgrounds cover the whole span, not just the backticks.
-- `images = true` draws local markdown images inline in Kitty-compatible
-  terminals, with alt text kept visible below the anchor.
+- `images = true` draws local markdown images inline using Kitty graphics or
+  sixel (`[editor.markdown] image-protocol = "auto" | "kitty" | "sixel" |
+  "none"`), with alt text kept visible below the anchor.
+
+### Snippets
+
+The MIT-licensed [friendly-snippets](https://github.com/rafamadriz/friendly-snippets)
+set is vendored under `runtime/snippets/` and loaded for every language it
+covers, not just Markdown: C/C++, Rust, Python, JavaScript/TypeScript, Go, Lua,
+Java, C#, shell, LaTeX, and more. Helix-specific language names (`c-sharp`,
+`jsx`, `tsx`, `bash`, `latex`) resolve to their snippet mappings.
+
+Type a prefix such as `for`, `gfor`, `fn`, or `if` and pick the `snippet`
+item. Typing replaces the first placeholder, `Tab`/`S-Tab` walk tabstops, and
+repeated `$n` placeholders are mirrors that update together. The session ends
+when you Tab past the last placeholder or move the cursor outside the snippet,
+and auto-completion pauses while a snippet is active so `Tab` navigates
+placeholders. Markdown adds tables from `2x1table` through `7x7table`, extra
+callouts, underline/highlight, and C++ gets a `gfor` loop with editable parts.
 
 ### Syntax highlighting
 
