@@ -32,13 +32,20 @@ impl IndexMut<TabstopIdx> for ActiveSnippet {
 
 impl ActiveSnippet {
     pub fn new(snippet: RenderedSnippet) -> Option<Self> {
-        let snippet = Self {
+        if snippet.tabstops.len() == 1 {
+            return None;
+        }
+        let mut snippet = Self {
             ranges: snippet.ranges,
             tabstops: snippet.tabstops,
             active_tabstops: HashSet::default(),
             current_tabstop: TabstopIdx(0),
         };
-        (snippet.tabstops.len() != 1).then_some(snippet)
+        // The first tabstop is selected as soon as the snippet is inserted.
+        // Mark it active so its range grows with the typed replacement
+        // instead of collapsing (which would break `S-Tab` back to it).
+        snippet.active_tabstops.insert(TabstopIdx(0));
+        Some(snippet)
     }
 
     pub fn is_valid(&self, new_selection: &Selection) -> bool {
@@ -71,9 +78,13 @@ impl ActiveSnippet {
 
         for (i, tabstop) in self.tabstops.iter_mut().enumerate() {
             if self.active_tabstops.contains(&TabstopIdx(i)) {
+                // The active tabstop must cover text typed at its boundaries.
+                // Placeholder replacement deletes the placeholder first, which
+                // collapses the range; the following insertion must then grow
+                // it again (`[start, start]` -> `[start, start + 1]`).
                 let positions_to_map = tabstop.ranges.iter_mut().flat_map(|range| {
                     [
-                        (&mut range.start, Assoc::After),
+                        (&mut range.start, Assoc::Before),
                         (&mut range.end, Assoc::After),
                     ]
                 });
@@ -269,6 +280,54 @@ mod tests {
         let (second, last) = active.next_tabstop(&first);
         assert!(!last);
         assert!(active.prev_tabstop(&second).is_some());
+    }
+
+    #[test]
+    fn prev_tabstop_selection_covers_typed_placeholder() {
+        let snippet = Snippet::parse("for ${1:value} in ${2:iterable}:").unwrap();
+        let mut doc = Rope::from("\n");
+        let (transaction, _, rendered) = snippet.render(
+            &doc,
+            &Selection::point(0),
+            |_| (0, 0),
+            &mut SnippetRenderCtx::test_ctx(),
+        );
+        assert!(transaction.apply(&mut doc));
+        let mut active = ActiveSnippet::new(rendered).unwrap();
+
+        let map = |doc: &mut Rope, active: &mut ActiveSnippet, transaction: Transaction| {
+            assert!(transaction.apply(doc));
+            active.map(transaction.changes());
+        };
+
+        // Typing deletes the placeholder and then inserts, like the
+        // insert-mode fallback. The tabstop must grow over the typed text.
+        let first = active.tabstop_selection(0, Direction::Forward).primary();
+        let delete = active.delete_placeholder(&doc);
+        map(&mut doc, &mut active, delete);
+        assert_eq!(doc, "for  in iterable:\n");
+        let insert = Transaction::insert(&doc, &Selection::point(first.from()), "x".into());
+        map(&mut doc, &mut active, insert);
+        let insert = Transaction::insert(&doc, &Selection::point(first.from() + 1), "y".into());
+        map(&mut doc, &mut active, insert);
+        assert_eq!(doc, "for xy in iterable:\n");
+
+        let (second, _) = active.next_tabstop(&Selection::point(first.from() + 2));
+        assert_eq!(
+            doc.slice(second.primary().from()..second.primary().to()),
+            "iterable"
+        );
+        let delete = active.delete_placeholder(&doc);
+        map(&mut doc, &mut active, delete);
+        let insert =
+            Transaction::insert(&doc, &Selection::point(second.primary().from()), "z".into());
+        map(&mut doc, &mut active, insert);
+        assert_eq!(doc, "for xy in z:\n");
+
+        let current = active.tabstop_selection(0, Direction::Forward);
+        let previous = active.prev_tabstop(&current).unwrap();
+        let selected = previous.primary();
+        assert_eq!(doc.slice(selected.from()..selected.to()), "xy");
     }
 
     #[test]
