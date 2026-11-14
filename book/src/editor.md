@@ -344,10 +344,12 @@ use `● ○ ◆ ◇` by nesting depth, task boxes use `󰄱`/`󰱒`, block quot
 and horizontal rules become a full-width `─` line. Heading rows get a
 full-width background from existing theme scopes; icons use
 `markup.heading.1`–`.6`. Code blocks get a full-width background and inline
-code gets a background. Code fence lines are folded away so the first code
-line follows the preceding text directly; move the cursor onto a fence line to
-see and edit it. Set `hide-code-fences = false` to keep the fence line as a
-blank header row instead. Rendering paints over the rendered document, so the
+code gets a background. Inline-code backticks are hidden unless the cursor is
+inside that span (empty or all-space pairs keep their backticks). Code fence
+lines are folded away so the first code line follows the preceding text
+directly; move the cursor onto a fence line to see and edit it. Set
+`hide-code-fences = false` to keep the fence line as a blank header row
+instead. Rendering paints over the rendered document, so the
 buffer text is unchanged and editing/saving/searching still see ordinary
 markdown. Non-table cursor lines and selections show raw markdown; table rows
 stay rendered under the cursor so their inline formatting remains visible.
