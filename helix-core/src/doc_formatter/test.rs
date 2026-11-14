@@ -211,3 +211,50 @@ fn annotation_and_overlay() {
         "fooo  bar "
     );
 }
+
+fn hidden_lines_text(text: &str, hidden: &[usize], softwrap: bool) -> String {
+    DocumentFormatter::new_at_prev_checkpoint(
+        text.into(),
+        &TextFormat::new_test(softwrap),
+        TextAnnotations::default().add_hidden_lines(hidden.iter().copied()),
+        0,
+    )
+    .collect_to_str()
+}
+
+#[test]
+fn hidden_lines_are_folded() {
+    assert_eq!(
+        hidden_lines_text("one\ntwo\nthree\nfour\n", &[1], false),
+        "one \nthree \nfour \n "
+    );
+    assert_eq!(
+        hidden_lines_text("one\ntwo\nthree\nfour\n", &[1], true),
+        "one \nthree \nfour \n "
+    );
+}
+
+#[test]
+fn hidden_first_line_starts_at_top() {
+    assert_eq!(hidden_lines_text("one\ntwo\n", &[0], false), "two \n ");
+}
+
+#[test]
+fn hidden_line_does_not_consume_a_softwrap_row() {
+    let text = "foo foo foo foo foo foo\nhidden\nbar\n";
+    let text_fmt = TextFormat::new_test(true);
+    let mut annotations = TextAnnotations::default();
+    annotations.add_hidden_lines([1]);
+    let rows: Vec<(usize, usize)> =
+        DocumentFormatter::new_at_prev_checkpoint(text.into(), &text_fmt, &annotations, 0)
+            .map(|grapheme| (grapheme.line_idx, grapheme.visual_pos.row))
+            .collect();
+
+    assert!(rows.iter().all(|(line, _)| *line != 1));
+    let bar_row = rows
+        .iter()
+        .find(|(line, _)| *line == 2)
+        .expect("bar should be rendered")
+        .1;
+    assert_eq!(bar_row, 2, "hidden line must not take a visual row");
+}
