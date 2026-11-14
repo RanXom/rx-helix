@@ -160,6 +160,9 @@ render = true
 # fence row (with its language header) visible.
 hide-code-fences = true
 images = true
+# "auto" picks Kitty graphics or sixel from the terminal. Force one with
+# "kitty" or "sixel", or disable images with "none".
+image-protocol = "auto"
 
 # Built-in spell checking for Markdown, plain text and similar prose files.
 # Requires hunspell; navigate with [s / ]s, suggest with z=.

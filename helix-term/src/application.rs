@@ -378,7 +378,8 @@ impl Application {
     }
 
     async fn render(&mut self) {
-        if self.compositor.full_redraw {
+        let full_redraw = self.compositor.full_redraw;
+        if full_redraw {
             self.terminal.clear().expect("Cannot clear the terminal");
             self.compositor.full_redraw = false;
         }
@@ -410,6 +411,7 @@ impl Application {
 
         let pos = pos.map(|pos| (pos.col as u16, pos.row as u16));
         self.terminal.draw(pos, kind).unwrap();
+        let image_redraw = full_redraw || self.terminal.take_image_redraw();
         if self.compositor.has_overlay() {
             // Keep images from painting over pickers/prompts/menus, mirroring
             // image.nvim's window_overlap_clear behavior. Virtual lines stay
@@ -418,7 +420,7 @@ impl Application {
             // images instead of re-sending them all.
             crate::ui::image::clear_placements();
         } else {
-            crate::ui::image::render(&self.editor);
+            crate::ui::image::render(&self.editor, image_redraw);
         }
     }
 

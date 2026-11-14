@@ -825,6 +825,20 @@ impl Default for ObsidianConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum ImageProtocolConfig {
+    /// Pick Kitty graphics or sixel from the terminal environment.
+    #[default]
+    Auto,
+    /// Force the Kitty graphics protocol.
+    Kitty,
+    /// Force sixel.
+    Sixel,
+    /// Disable inline images.
+    None,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default, deny_unknown_fields)]
 pub struct MarkdownConfig {
@@ -832,8 +846,10 @@ pub struct MarkdownConfig {
     pub render: bool,
     /// Fold code fence lines (```` ``` ````) away unless the cursor is on them.
     pub hide_code_fences: bool,
-    /// Render local images in markdown buffers with the Kitty graphics protocol.
+    /// Render local images in markdown buffers.
     pub images: bool,
+    /// Terminal image protocol used when `images` is enabled.
+    pub image_protocol: ImageProtocolConfig,
     /// Download remote `http(s)` images with `curl` into the cache.
     /// Mirrors image.nvim's `download_remote_images`.
     pub download_remote_images: bool,
@@ -849,6 +865,7 @@ impl Default for MarkdownConfig {
             render: false,
             hide_code_fences: true,
             images: false,
+            image_protocol: ImageProtocolConfig::Auto,
             download_remote_images: true,
             link_icons: Vec::new(),
         }

@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 
+use helix_view::markdown::{image_protocol, ImageProtocol};
 use helix_view::Editor;
 
 struct Placement {
@@ -50,9 +51,18 @@ fn state() -> &'static Mutex<ImageState> {
     STATE.get_or_init(|| Mutex::new(ImageState::default()))
 }
 
-pub fn render(editor: &Editor) {
+pub fn render(editor: &Editor, force: bool) {
+    let protocol = image_protocol(&editor.config().markdown);
+    match protocol {
+        Some(ImageProtocol::Kitty) => render_kitty(editor),
+        Some(ImageProtocol::Sixel) => sixel::render(editor, force),
+        None => {}
+    }
+}
+
+fn render_kitty(editor: &Editor) {
     let config = editor.config();
-    if !kitty_supported() {
+    if !helix_view::markdown::kitty_supported() {
         return;
     }
     if !config.markdown.images {
@@ -135,7 +145,12 @@ pub fn render(editor: &Editor) {
 /// temporarily covers the text, so closing it does not retransmit every
 /// image.
 pub fn clear_placements() {
-    if !kitty_supported() {
+    clear_kitty_placements();
+    sixel::clear_placements();
+}
+
+fn clear_kitty_placements() {
+    if !helix_view::markdown::kitty_supported() {
         return;
     }
     let mut state = state().lock().unwrap();
@@ -148,7 +163,12 @@ pub fn clear_placements() {
 
 /// Remove all image placements. Called on exit.
 pub fn clear() {
-    if !kitty_supported() {
+    clear_kitty();
+    sixel::clear();
+}
+
+fn clear_kitty() {
+    if !helix_view::markdown::kitty_supported() {
         return;
     }
     let mut state = state().lock().unwrap();
@@ -165,11 +185,6 @@ fn flush_output(output: &str) {
     let mut stdout = std::io::stdout().lock();
     let _ = stdout.write_all(output.as_bytes());
     let _ = stdout.flush();
-}
-
-fn kitty_supported() -> bool {
-    std::env::var_os("KITTY_WINDOW_ID").is_some()
-        || std::env::var("TERM").is_ok_and(|term| term.contains("kitty"))
 }
 
 fn transmit(state: &mut ImageState, path: &Path, out: &mut String) -> u32 {
@@ -290,6 +305,279 @@ fn base64_encode(input: &[u8]) -> String {
         });
     }
     output
+}
+
+mod sixel {
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::SystemTime;
+
+    use helix_view::graphics::Color;
+    use helix_view::markdown::{cell_size, sixel_supported};
+    use helix_view::Editor;
+
+    use super::{compute_placements, flush_output, Placement};
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    struct Rect {
+        x: u16,
+        y: u16,
+        cols: u16,
+        rows: u16,
+    }
+
+    struct CachedSixel {
+        modified: Option<SystemTime>,
+        data: String,
+    }
+
+    #[derive(Clone, PartialEq, Eq, Hash)]
+    struct SixelKey {
+        path: PathBuf,
+        width: u32,
+        height: u32,
+        crop: Option<(u32, u32, u32, u32)>,
+    }
+
+    #[derive(Clone, PartialEq, Eq)]
+    struct PlacedSixel {
+        rect: Rect,
+        key: SixelKey,
+    }
+
+    #[derive(Default)]
+    struct State {
+        cache: HashMap<SixelKey, CachedSixel>,
+        placed: Vec<PlacedSixel>,
+        /// Editor background used when erasing the previous image area.
+        background: Option<Color>,
+    }
+
+    fn state() -> &'static Mutex<State> {
+        static STATE: OnceLock<Mutex<State>> = OnceLock::new();
+        STATE.get_or_init(|| Mutex::new(State::default()))
+    }
+
+    pub fn render(editor: &Editor, force: bool) {
+        if !sixel_supported() {
+            return;
+        }
+        let config = editor.config();
+        if !config.markdown.images {
+            clear_placements();
+            return;
+        }
+
+        let placements = compute_placements(editor);
+        let mut state = state().lock().unwrap();
+        if placements.is_empty() && state.placed.is_empty() {
+            return;
+        }
+
+        let background = editor.theme.get("ui.background").bg;
+        state.background = background;
+
+        // Encode before comparing so a cache hit costs nothing. Re-emitting a
+        // sixel payload on every keystroke would be very expensive, so only
+        // redraw when the layout/data changed or the terminal was cleared.
+        let mut new_placed = Vec::with_capacity(placements.len());
+        for placement in placements {
+            let Some(key) = encode(&mut state, &placement) else {
+                continue;
+            };
+            new_placed.push(PlacedSixel {
+                rect: Rect {
+                    x: placement.x,
+                    y: placement.y,
+                    cols: placement.cols,
+                    rows: placement.rows,
+                },
+                key,
+            });
+        }
+        log::debug!(
+            "sixel: placements={} new={} force={force}",
+            state.placed.len(),
+            new_placed.len()
+        );
+        if !force && new_placed == state.placed {
+            return;
+        }
+
+        let mut out = String::new();
+        out.push_str("\x1b7");
+        erase(
+            state.placed.iter().map(|placed| placed.rect),
+            background,
+            &mut out,
+        );
+        for placed in &new_placed {
+            let Some(data) = state.cache.get(&placed.key) else {
+                continue;
+            };
+            out.push_str(&format!(
+                "\x1b[{};{}H",
+                placed.rect.y + 1,
+                placed.rect.x + 1
+            ));
+            out.push_str(&data.data);
+        }
+        state.placed = new_placed;
+        out.push_str("\x1b8");
+        drop(state);
+        flush_output(&out);
+    }
+
+    pub fn clear_placements() {
+        if !sixel_supported() {
+            return;
+        }
+        let mut state = state().lock().unwrap();
+        if state.placed.is_empty() {
+            return;
+        }
+        let background = state.background;
+        let mut out = String::new();
+        out.push_str("\x1b7");
+        erase(
+            state.placed.iter().map(|placed| placed.rect),
+            background,
+            &mut out,
+        );
+        state.placed.clear();
+        out.push_str("\x1b8");
+        drop(state);
+        flush_output(&out);
+    }
+
+    pub fn clear() {
+        if !sixel_supported() {
+            return;
+        }
+        let mut state = state().lock().unwrap();
+        if state.placed.is_empty() && state.cache.is_empty() {
+            return;
+        }
+        let background = state.background;
+        let mut out = String::new();
+        out.push_str("\x1b7");
+        erase(
+            state.placed.iter().map(|placed| placed.rect),
+            background,
+            &mut out,
+        );
+        state.placed.clear();
+        state.cache.clear();
+        out.push_str("\x1b8");
+        drop(state);
+        flush_output(&out);
+    }
+
+    /// Erase the previous image area. `ECH` triggers foot's sixel overwrite
+    /// without writing characters (so it cannot wrap or scroll the screen).
+    fn erase(rects: impl IntoIterator<Item = Rect>, background: Option<Color>, out: &mut String) {
+        out.push_str("\x1b[0m");
+        out.push_str(&sgr_background(background));
+        for rect in rects {
+            for row in 0..rect.rows {
+                out.push_str(&format!(
+                    "\x1b[{};{}H\x1b[{}X",
+                    rect.y + row + 1,
+                    rect.x + 1,
+                    rect.cols
+                ));
+            }
+        }
+        out.push_str("\x1b[0m");
+    }
+
+    fn sgr_background(color: Option<Color>) -> String {
+        match color {
+            Some(Color::Rgb(r, g, b)) => format!("\x1b[48;2;{r};{g};{b}m"),
+            Some(Color::Indexed(index)) => format!("\x1b[48;5;{index}m"),
+            _ => "\x1b[49m".to_string(),
+        }
+    }
+
+    fn encode(state: &mut State, placement: &Placement) -> Option<SixelKey> {
+        let modified = fs::metadata(&placement.path)
+            .and_then(|meta| meta.modified())
+            .ok();
+        let (cell_width, cell_height) = cell_size();
+        // Floor so the encoded bitmap cannot spill into the row/column after
+        // the reserved cell area (which would leave an un-erased sliver).
+        let target_width = ((placement.cols as f32 * cell_width).floor() as u32).max(1);
+        let target_height = ((placement.rows as f32 * cell_height).floor() as u32).max(1);
+        let key = SixelKey {
+            path: placement.path.clone(),
+            width: target_width,
+            height: target_height,
+            crop: placement.crop,
+        };
+        if let Some(cached) = state.cache.get(&key) {
+            if cached.modified == modified {
+                return Some(key);
+            }
+        }
+
+        // Sniff the format instead of trusting the extension: a PNG can keep
+        // a non-`.png` name and still be sent through the direct path.
+        let bytes = fs::read(&placement.path).ok()?;
+        let image = match image::load_from_memory(&bytes) {
+            Ok(image) => image,
+            Err(err) => {
+                log::debug!("sixel: decode {} failed: {err:?}", placement.path.display());
+                return None;
+            }
+        };
+        let image = if let Some((x, y, width, height)) = placement.crop {
+            image.crop_imm(x, y, width, height)
+        } else {
+            image
+        };
+        let rgba = image
+            .resize_exact(
+                target_width,
+                target_height,
+                image::imageops::FilterType::Triangle,
+            )
+            .to_rgba8();
+        let data = match icy_sixel::SixelImage::from_rgba(
+            rgba.into_raw(),
+            target_width as usize,
+            target_height as usize,
+        )
+        .encode()
+        {
+            Ok(data) => data,
+            Err(err) => {
+                log::debug!(
+                    "sixel: encode {} at {target_width}x{target_height} failed: {err:?}",
+                    placement.path.display()
+                );
+                return None;
+            }
+        };
+        log::debug!(
+            "sixel: {} at {}x{} -> {} bytes",
+            placement.path.display(),
+            target_width,
+            target_height,
+            data.len()
+        );
+
+        // Sixel payloads are large. A small cache is enough for the visible
+        // images; drop everything when it grows instead of tracking an LRU.
+        if state.cache.len() >= 16 {
+            state.cache.clear();
+        }
+        state
+            .cache
+            .insert(key.clone(), CachedSixel { modified, data });
+        Some(key)
+    }
 }
 
 #[cfg(test)]
