@@ -245,9 +245,11 @@ impl Completion {
                                 snippet,
                             )
                         }
-                        CompletionItem::Other(core::CompletionItem { transaction, .. }) => {
-                            (transaction, None, None)
-                        }
+                        CompletionItem::Other(core::CompletionItem {
+                            transaction,
+                            snippet,
+                            ..
+                        }) => (transaction, None, snippet),
                     };
 
                     doc.apply(&transaction, view.id);

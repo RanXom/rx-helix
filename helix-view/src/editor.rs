@@ -1458,7 +1458,7 @@ impl Default for Config {
             idle_timeout: Duration::from_millis(250),
             completion_timeout: Duration::from_millis(5),
             preview_completion_insert: true,
-            completion_trigger_len: 2,
+            completion_trigger_len: 1,
             auto_info: true,
             file_picker: FilePickerConfig::default(),
             file_explorer: FileExplorerConfig::default(),

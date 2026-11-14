@@ -48,7 +48,7 @@
 | `idle-timeout` | Time in milliseconds since last keypress before idle timers trigger. | `250` |
 | `completion-timeout` | Time in milliseconds after typing a word character before completions are shown. `5` is near instant; raise it if a slow language server is overwhelmed. | `5` |
 | `preview-completion-insert` | Whether to apply completion item instantly when selected | `true` |
-| `completion-trigger-len` | The min-length of word under cursor to trigger autocompletion | `2` |
+| `completion-trigger-len` | The min-length of word under cursor to trigger autocompletion. Raise it if a slow language server is overwhelmed by per-keystroke requests. | `1` |
 | `completion-replace` | Whether to make completions always replace the entire word and not just the part before the cursor | `false` |
 | `auto-info` | Whether to display info boxes | `true` |
 | `true-color` | Whether to override automatic detection of terminal truecolor support in the event of a false negative | `false` |
@@ -355,6 +355,16 @@ buffer text is unchanged and editing/saving/searching still see ordinary
 markdown. Non-table cursor lines and selections show raw markdown; table rows
 stay rendered under the cursor so their inline formatting remains visible.
 Code fences keep their tree-sitter highlighting.
+Local snippet completions are available in every language covered by the
+vendored friendly-snippets set (C/C++, Rust, Python, JavaScript/TypeScript,
+Go, Lua, ...): type a prefix such as `for`/`gfor`, `fn`, or `if` and pick the
+`snippet` item. Markdown additionally provides bold/italic, headings, links,
+callouts, and tables from `2x1table` through `7x7table` (plus a `gfor` C++
+loop with editable parts). The cursor lands in the first placeholder; typing
+replaces it, `Tab`/`S-Tab` walk placeholders, and repeated `$n` placeholders
+are mirrors that update together. The session ends when you Tab past the last
+placeholder or move the cursor outside the snippet. Auto-completion pauses
+while a snippet is active; manual completion still works.
 Links and wiki links show icons while destinations are concealed, with
 per-host icons for known sites, and links inside headings, lists, quotes,
 tables, and callout titles are decorated. Inline code, emphasis, strong,
@@ -786,6 +796,10 @@ Options for navigating and editing using tab key.
 |------------|-------------|---------|
 | `enable` | If set to true, then when the cursor is in a position with non-whitespace to its left, instead of inserting a tab, it will run `move_parent_node_end`. If there is only whitespace to the left, then it inserts a tab as normal. With the default bindings, to explicitly insert a tab character, press Shift-tab. | `true` |
 | `supersede-menu` | Normally, when a menu is on screen, such as when auto complete is triggered, the tab key is bound to cycling through the items. This means when menus are on screen, one cannot use the tab key to trigger the `smart-tab` command. If this option is set to true, the `smart-tab` command always takes precedence, which means one cannot use the tab key to cycle through menu items. One of the other bindings must be used instead, such as arrow keys or `C-n`/`C-p`. | `false` |
+
+While a snippet is active, `Tab` and `S-Tab` always move to the next and
+previous tabstop, regardless of `enable`. Outside a snippet, `S-Tab` inserts a
+tab as before.
 
 
 Due to lack of support for S-tab in some terminals, the default keybindings don't fully embrace smart-tab editing experience. If you enjoy smart-tab navigation and a terminal that supports the [Enhanced Keyboard protocol](https://github.com/helix-editor/helix/wiki/Terminal-Support#enhanced-keyboard-protocol), consider setting extra keybindings:

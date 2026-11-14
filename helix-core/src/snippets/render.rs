@@ -21,7 +21,7 @@ pub enum TabstopKind {
     Transform(Arc<Transform>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Tabstop {
     pub ranges: SmallVec<[Range; 1]>,
     pub parent: Option<TabstopIdx>,
@@ -58,7 +58,7 @@ impl Tabstop {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct RenderedSnippet {
     pub tabstops: Vec<Tabstop>,
     pub ranges: Vec<Range>,
@@ -287,6 +287,17 @@ impl SnippetRender<'_> {
                 self.dst[tabstop].kind = TabstopKind::Placeholder;
                 self.off
             }
+            elaborate::TabstopKind::Choice { choices } => {
+                if let Some(first) = choices.first() {
+                    self.push_str(first, self.at_newline);
+                    self.dst[tabstop].kind = TabstopKind::Choice {
+                        choices: choices.clone(),
+                    };
+                    self.off
+                } else {
+                    start
+                }
+            }
             _ => start,
         };
         self.dst[tabstop].ranges.push(Range { start, end });
@@ -299,6 +310,7 @@ mod tests {
 
     use crate::snippets::render::Tabstop;
     use crate::snippets::{Snippet, SnippetRenderCtx};
+    use crate::Tendril;
 
     use super::TabstopKind;
 
@@ -321,6 +333,28 @@ mod tests {
             rendered_text.chars().count()
         );
         assert_eq!(rendered_snippet.ranges.last().unwrap().start, 0)
+    }
+
+    #[test]
+    fn choice_renders_first_option() {
+        assert_snippet(
+            "a${1|b,c|}d",
+            "abd",
+            &[
+                Tabstop {
+                    ranges: vec![Range { start: 1, end: 2 }].into(),
+                    parent: None,
+                    kind: TabstopKind::Choice {
+                        choices: vec![Tendril::from("b"), Tendril::from("c")].into(),
+                    },
+                },
+                Tabstop {
+                    ranges: vec![Range { start: 3, end: 3 }].into(),
+                    parent: None,
+                    kind: TabstopKind::Empty,
+                },
+            ],
+        );
     }
 
     #[test]
