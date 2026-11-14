@@ -156,6 +156,9 @@ action = ":quit"
 # Optional display-only markdown rendering.
 [editor.markdown]
 render = true
+# Fold ``` fence lines unless the cursor is on them. Set to false to keep the
+# fence row (with its language header) visible.
+hide-code-fences = true
 images = true
 
 # Built-in spell checking for Markdown, plain text and similar prose files.
