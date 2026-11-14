@@ -353,7 +353,8 @@ pub struct Config {
     )]
     pub idle_timeout: Duration,
     /// Time in milliseconds after typing a word character before auto completions
-    /// are shown, set to 5 for instant. Defaults to 250ms.
+    /// are shown. Defaults to 5ms (near instant); increase it if a slow language
+    /// server is overwhelmed by requests on every keystroke.
     #[serde(
         serialize_with = "serialize_duration_millis",
         deserialize_with = "deserialize_duration_millis"
@@ -1455,7 +1456,7 @@ impl Default for Config {
             default_yank_register: '"',
             auto_save: AutoSave::default(),
             idle_timeout: Duration::from_millis(250),
-            completion_timeout: Duration::from_millis(250),
+            completion_timeout: Duration::from_millis(5),
             preview_completion_insert: true,
             completion_trigger_len: 2,
             auto_info: true,
