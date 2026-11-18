@@ -768,11 +768,13 @@ impl<T: 'static + Send + Sync, D: 'static + Send + Sync> Picker<T, D> {
                     .bg(crate::ui::primary_color(theme))
                     .add_modifier(Modifier::BOLD)
             });
-        let highlight_style = theme.try_get("ui.picker.match").unwrap_or_else(|| {
-            Style::default()
-                .fg(crate::ui::primary_color(theme))
-                .add_modifier(Modifier::BOLD)
-        });
+        // Matched text uses the visual-selection palette. Themes that do not
+        // define `ui.picker.match` fall back to `ui.selection` rather than an
+        // accent color, so matching text never gets a separate highlight hue.
+        let highlight_style = theme
+            .try_get("ui.picker.match")
+            .or_else(|| theme.try_get("ui.selection"))
+            .unwrap_or_else(|| Style::default().add_modifier(Modifier::REVERSED));
 
         // -- Render the frame:
         // clear area

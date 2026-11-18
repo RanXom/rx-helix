@@ -458,10 +458,10 @@ impl Table<'_> {
                 col
             };
             if is_selected {
+                // Fill the row with the selection style, but keep the styles
+                // of each span so highlights inside the row (for example
+                // picker match highlights) stay visible.
                 buf.set_style(table_row_area, self.highlight_style);
-                for cell in &mut table_row.cells {
-                    cell.set_style(self.highlight_style);
-                }
             }
             let mut col = table_row_start_col;
             for (width, cell) in columns_widths.iter().zip(table_row.cells.iter()) {

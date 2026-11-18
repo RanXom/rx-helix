@@ -105,8 +105,10 @@ inherits = "noctalia"
 "ui.cursor.primary.select" = { fg = "background", bg = "onSurface" }
 "ui.cursor.match" = { fg = "background", bg = "outline" }
 
-"ui.highlight" = { fg = "surfaceContainer", bg = "secondary" }
-"ui.highlight.frameline" = { bg = "secondaryContainer" }
+# Highlighted matches (picker preview lines, LSP document highlights) use the
+# visual-selection palette instead of accent colors.
+"ui.highlight" = { fg = "onSurface", bg = "surfaceContainerHigh" }
+"ui.highlight.frameline" = { bg = "surfaceContainerHigh" }
 # Brief flash over the range that was just yanked.
 "ui.yank" = { fg = "onTertiary", bg = "tertiary" }
 
@@ -159,9 +161,10 @@ inherits = "noctalia"
 "ui.debug" = { fg = "error" }
 "ui.debug.breakpoint" = { fg = "tertiary" }
 
-# Neovim Telescope / mini.pick roles.
-"ui.picker.selected" = { fg = "onSurface", bg = "surfaceContainerHigh" }
-"ui.picker.match" = { fg = "primary", modifiers = ["bold"] }
+# Neovim Telescope / mini.pick roles. Matched text uses the visual-selection
+# palette; the selected row is one neutral step lighter so matches stay visible.
+"ui.picker.selected" = { fg = "onSurface", bg = "surfaceContainerHighest" }
+"ui.picker.match" = { fg = "onSurface", bg = "surfaceContainerHigh" }
 "ui.picker.border" = { fg = "outline" }
 "ui.picker.title" = { fg = "background", bg = "primary", modifiers = ["bold"] }
 "ui.picker.help" = { fg = "onSurfaceVariant" }
